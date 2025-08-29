@@ -1,2 +1,2 @@
-# luck-game-apis
-luck-game-apis
+# lucky-game-apis
+lucky-game-apis
