@@ -2,7 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import bodyParser from "body-parser";
-// import routes from './app/routes/index.js';
+import routes from './app/routes/index.js';
 import {connectDB} from './app/config/dbConfig.js';
 
 dotenv.config();
@@ -27,7 +27,7 @@ app.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));
 app.use(express.json());
 
 connectDB();
-// routes(app);
+routes(app);
 
 
 
