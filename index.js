@@ -2,8 +2,8 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import bodyParser from "body-parser";
-import routes from './app/routes/index.js';
-import {connectDB} from './app/config/dbConfig.js';
+import routes from "./app/routes/index.js";
+import { connectDB } from "./app/config/dbConfig.js";
 
 dotenv.config();
 
@@ -13,8 +13,11 @@ const port = process.env.PORT || 5050;
 
 app.use(
   cors({
-    origin: [,
-      "http://localhost:3000"
+    origin: [
+      ,
+      "http://localhost:5173",
+      "http://192.168.0.136:5173",
+      "http://192.168.0.239:8082",
     ],
     methods: ["GET", "POST", "HEAD", "PUT", "PATCH", "DELETE"],
     optionsSuccessStatus: 200,
@@ -29,8 +32,6 @@ app.use(express.json());
 connectDB();
 routes(app);
 
-
-
 app.get("/", (req, res) => {
   return res.status(200).send({
     error: false,
@@ -38,6 +39,6 @@ app.get("/", (req, res) => {
   });
 });
 
-app.listen(port,host, () => 
+app.listen(port, host, () =>
   console.log(`App is listening at port: http://${host}:${port}`)
 );

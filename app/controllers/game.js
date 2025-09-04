@@ -1,81 +1,164 @@
-import User from '../models/user/user.js';
-import Game from '../models/game/game.js';
-import Transaction from '../models/transaction/transaction.js';
-import { v4 as uuidv4 } from 'uuid';
-import cron from 'node-cron';
-import { handleResponse } from '../utils/helper.js';
+import User from "../models/user/user.js";
+import Game from "../models/game/game.js";
+import Transaction from "../models/transaction/transaction.js";
+import { v4 as uuidv4 } from "uuid";
+import cron from "node-cron";
+import { handleResponse } from "../utils/helper.js";
 const betAmounts = [1, 5, 10, 20, 50, 100, 200, 500, 1000, 5000];
 
+// export const playGame = async (req, res) => {
+//     const { selectedNumber, bidAmount } = req.body;
+//     const userId = req.user.id;
+
+//     if (!betAmounts.includes(bidAmount)) {
+//       return handleResponse(res, 400, "Invalid bet amount");
+//     }
+
+//     if (selectedNumber < 0 || selectedNumber > 9) {
+//       return handleResponse(res, 400, "Selected number must be between 0 and 9");
+//     }
+
+//     try {
+//       const activeGame = await Game.findOne({ gameStatus: 'active' }).sort({ timestamp: -1 });
+
+//       if (!activeGame) {
+//         return handleResponse(res, 400, "No active game found");
+//       }
+
+//       const user = await User.findOne({ _id: userId });
+//       if (!user) return handleResponse(res, 404, "User not found");
+
+//       if (typeof user.wallet !== 'number') user.wallet = 0;
+
+//       if (user.wallet < bidAmount) {
+//         return handleResponse(res, 400, "Insufficient balance");
+//       }
+
+//       user.wallet -= bidAmount;
+
+//       await Transaction.create({
+//         userId: user._id,
+//         transactionType: 'deduction',
+//         amount: bidAmount,
+//         newBalance: user.wallet,
+//         description: `Bid placed on game ${activeGame.gameId}`
+//       });
+
+//       await user.save();
+
+//       activeGame.users.push({
+//         userId: user._id,
+//         selectedNumber,
+//         bidAmount,
+//         result: null,
+//       });
+
+//       await activeGame.save();
+
+//       return handleResponse(res, 200, "Bid placed successfully. Wait for game results.", {
+//         balance: user.wallet,
+//         selectedNumber,
+//         bidAmount,
+//         gameId: activeGame.gameId,
+//       });
+
+//     } catch (err) {
+//       console.error(err);
+//       return handleResponse(res, 500, "Server error");
+//     }
+// };
+
 export const playGame = async (req, res) => {
-    const { selectedNumber, bidAmount } = req.body;
-    const userId = req.user.id;
-  
-    if (!betAmounts.includes(bidAmount)) {
-      return handleResponse(res, 400, "Invalid bet amount");
+  const { selectedNumbers, bidAmount } = req.body;
+  const userId = req.user.id;
+
+  if (!Array.isArray(selectedNumbers) || selectedNumbers.length === 0) {
+    return handleResponse(
+      res,
+      400,
+      "selectedNumbers must be a non-empty array."
+    );
+  }
+
+  if (typeof bidAmount !== "number" || !betAmounts.includes(bidAmount)) {
+    return handleResponse(res, 400, "Invalid bid amount.");
+  }
+
+  // Validate numbers
+  for (const num of selectedNumbers) {
+    if (typeof num !== "number" || num < 0 || num > 9) {
+      return handleResponse(
+        res,
+        400,
+        "Each selected number must be between 0 and 9."
+      );
     }
-  
-    if (selectedNumber < 0 || selectedNumber > 9) {
-      return handleResponse(res, 400, "Selected number must be between 0 and 9");
+  }
+
+  try {
+    const activeGame = await Game.findOne({ gameStatus: "active" }).sort({
+      timestamp: -1,
+    });
+    if (!activeGame) {
+      return handleResponse(res, 400, "No active game found");
     }
-  
-    try {
-      const activeGame = await Game.findOne({ gameStatus: 'active' }).sort({ timestamp: -1 });
-  
-      if (!activeGame) {
-        return handleResponse(res, 400, "No active game found");
-      }
-  
-      const user = await User.findOne({ _id: userId });
-      if (!user) return handleResponse(res, 404, "User not found");
-  
-      if (typeof user.wallet !== 'number') user.wallet = 0;
-  
-      if (user.wallet < bidAmount) {
-        return handleResponse(res, 400, "Insufficient balance");
-      }
-  
-      user.wallet -= bidAmount;
-  
-      await Transaction.create({
-        userId: user._id,
-        transactionType: 'deduction',
-        amount: bidAmount,
-        newBalance: user.wallet,
-        description: `Bid placed on game ${activeGame.gameId}`
-      });
-  
-      await user.save();
-  
+
+    const user = await User.findById(userId);
+    if (!user) return handleResponse(res, 404, "User not found");
+    if (typeof user.wallet !== "number") user.wallet = 0;
+
+    const totalBidAmount = bidAmount * selectedNumbers.length;
+
+    if (user.wallet < totalBidAmount) {
+      return handleResponse(res, 400, "Insufficient balance for total bid.");
+    }
+
+    // Deduct total
+    user.wallet -= totalBidAmount;
+
+    await Transaction.create({
+      userId: user._id,
+      transactionType: "deduction",
+      amount: totalBidAmount,
+      newBalance: user.wallet,
+      description: `Placed bids on numbers [${selectedNumbers.join(
+        ", "
+      )}] in game ${activeGame.gameId}`,
+    });
+
+    await user.save();
+
+    // Save each bid
+    for (const num of selectedNumbers) {
       activeGame.users.push({
         userId: user._id,
-        selectedNumber,
-        bidAmount,
+        selectedNumber: num,
+        bidAmount: bidAmount,
         result: null,
       });
-  
-      await activeGame.save();
-  
-      return handleResponse(res, 200, "Bid placed successfully. Wait for game results.", {
-        balance: user.wallet,
-        selectedNumber,
-        bidAmount,
-        gameId: activeGame.gameId,
-      });
-  
-    } catch (err) {
-      console.error(err);
-      return handleResponse(res, 500, "Server error");
     }
-};
-  
 
-export const finalizeGameResults = async (game) => {
+    await activeGame.save();
+
+    return handleResponse(res, 200, "Bids placed successfully", {
+      balance: user.wallet,
+      gameId: activeGame.gameId,
+      selectedNumbers,
+      bidAmount,
+      totalBidAmount,
+    });
+  } catch (err) {
+    console.error(err);
+    return handleResponse(res, 500, "Server error");
+  }
+};
+
+/* export const finalizeGameResults = async (game) => {
   try {
-  
     if (game.winningNumber === null || game.winningNumber === undefined) {
       const randomWinningNumber = Math.floor(Math.random() * 10);
       game.winningNumber = randomWinningNumber;
-      game.adminSet = false; 
+      game.adminSet = false;
       await game.save();
     }
 
@@ -91,20 +174,20 @@ export const finalizeGameResults = async (game) => {
       let winAmount = 0;
 
       if (player.selectedNumber === game.winningNumber) {
-        result = 'win';
+        result = "win";
         // winAmount = player.bidAmount * 2;
-        winAmount = player.selectedNumber * player.bidAmount;  
+        winAmount = player.selectedNumber * player.bidAmount;
         user.wallet += winAmount;
 
         await Transaction.create({
           userId: user._id,
-          transactionType: 'deposit',
+          transactionType: "deposit",
           amount: winAmount,
           newBalance: user.wallet,
-          description: `Won game ${game.gameId} with number ${player.selectedNumber}`
+          description: `Won game ${game.gameId} with number ${player.selectedNumber}`,
         });
       } else {
-        result = 'lose';
+        result = "lose";
       }
 
       await user.save();
@@ -112,118 +195,368 @@ export const finalizeGameResults = async (game) => {
       game.users[i].result = result;
     }
 
-  
-    game.gameStatus = 'completed';
+    game.gameStatus = "completed";
 
     await game.save();
 
     console.log(`Game ${game.gameId} results finalized.`);
   } catch (error) {
-    console.error('Error finalizing game results:', error);
+    console.error("Error finalizing game results:", error);
+  }
+};
+ */
+export const finalizeGameResults = async (game) => {
+  try {
+    if (game.winningNumber === null || game.winningNumber === undefined) {
+      const randomWinningNumber = Math.floor(Math.random() * 10);
+      game.winningNumber = randomWinningNumber;
+      game.adminSet = false;
+      await game.save();
+    }
+
+    for (let i = 0; i < game.users.length; i++) {
+      const player = game.users[i];
+      const user = await User.findById(player.userId);
+      if (!user) {
+        console.log(`User ${player.userId} not found`);
+        continue;
+      }
+
+      let result;
+      let winAmount = 0;
+
+      if (player.selectedNumber === game.winningNumber) {
+        result = "win";
+
+        // // Example: payout is bidAmount * 2
+        // winAmount = player.bidAmount * 2;
+
+        // Agar aapko number ke hisaab se multiplier chahiye:
+        winAmount = player.selectedNumber * player.bidAmount;
+
+        user.wallet += winAmount;
+
+        await Transaction.create({
+          userId: user._id,
+          transactionType: "deposit",
+          amount: winAmount,
+          newBalance: user.wallet,
+          description: `Won game ${game.gameId} with number ${player.selectedNumber}`,
+        });
+      } else {
+        result = "lose";
+      }
+
+      await user.save();
+
+      game.users[i].result = result;
+    }
+
+    game.gameStatus = "completed";
+
+    await game.save();
+
+    console.log(`Game ${game.gameId} results finalized.`);
+  } catch (error) {
+    console.error("Error finalizing game results:", error);
   }
 };
 
+const generateGameId = async () => {
+  const dateStr = new Date().toISOString().split("T")[0];
+  const count =
+    (await Game.countDocuments({ gameId: new RegExp(`^GAME-${dateStr}`) })) + 1;
+  return `GAME-${dateStr}-${String(count).padStart(3, "0")}`;
+};
 
-cron.schedule('* * * * *', async () => {
+cron.schedule("* * * * *", async () => {
   try {
- 
-    const activeGames = await Game.find({ gameStatus: 'active' });
+    const activeGames = await Game.find({ gameStatus: "active" });
+
     for (const game of activeGames) {
-      console.log(`Auto completing game ${game.gameId}`);
-      await finalizeGameResults(game);
+      if (game.users.length === 0) {
+        await Game.deleteOne({ _id: game._id });
+        console.log(
+          `Game ${game.gameId} deleted because no users placed a bid.`
+        );
+      } else {
+        console.log(`Auto completing game ${game.gameId}`);
+        await finalizeGameResults(game);
+      }
     }
 
-    const gameId = uuidv4();
+    const gameId = await generateGameId();
     const newGame = new Game({
       gameId,
-      gameStatus: 'active',
+      gameStatus: "active",
       winningNumber: null,
       adminSet: false,
       timestamp: Date.now(),
-      users: []
+      users: [],
     });
 
     await newGame.save();
     console.log(`New game created with ID: ${gameId}`);
-
   } catch (err) {
     console.error("Error running cron job:", err);
   }
 });
 
-
 export const getMyLastGameResult = async (req, res) => {
-    const userId = req.user.id;
-  
-    try {
-      const game = await Game.findOne({
-        gameStatus: 'completed',
-        'users.userId': userId
-      }).sort({ timestamp: -1 });
-  
-      if (!game) {
-        return handleResponse(res, 404, "No completed game found for this user");
-      }
-  
-      const playerResult = game.users.find(u => u.userId.toString() === userId);
-  
-      if (!playerResult) {
-        return handleResponse(res, 404, "User did not participate in the last game");
-      }
-  
-      return handleResponse(res, 200, "Game result fetched successfully", {
-        gameId: game.gameId,
-        winningNumber: game.winningNumber,
-        selectedNumber: playerResult.selectedNumber,
-        result: playerResult.result,
-        bidAmount: playerResult.bidAmount,
-        timestamp: game.timestamp,
-      });
-  
-    } catch (err) {
-      console.error(err);
-      return handleResponse(res, 500, "Server error");
+  const userId = req.user.id;
+
+  try {
+    const game = await Game.findOne({
+      gameStatus: "completed",
+      "users.userId": userId,
+    }).sort({ timestamp: -1 });
+
+    if (!game) {
+      return handleResponse(res, 404, "No completed game found for this user");
     }
+
+    const userBids = game.users.filter((u) => u.userId.toString() === userId);
+
+    if (userBids.length === 0) {
+      return handleResponse(
+        res,
+        404,
+        "User did not participate in the last game"
+      );
+    }
+
+    const winningBids = userBids.filter((bid) => bid.result === "win");
+
+    const totalBidAmount = userBids.reduce(
+      (sum, bid) => sum + bid.bidAmount,
+      0
+    );
+    const totalWinAmount = winningBids.reduce(
+      (sum, bid) => sum + bid.selectedNumber * bid.bidAmount,
+      0
+    );
+
+    const userGameResult = winningBids.length > 0 ? "win" : "lose";
+
+    return handleResponse(res, 200, "Game result fetched successfully", {
+      gameId: game.gameId,
+      winningNumber: game.winningNumber,
+      result: userGameResult,
+      totalBidAmount,
+      totalWinAmount,
+      bids: userBids.map((bid) => ({
+        selectedNumber: bid.selectedNumber,
+        bidAmount: bid.bidAmount,
+        result: bid.result,
+      })),
+      winningBids: winningBids.map((bid) => ({
+        selectedNumber: bid.selectedNumber,
+        bidAmount: bid.bidAmount,
+        result: bid.result,
+        winAmount: bid.selectedNumber * bid.bidAmount, // ✅ Added here
+      })),
+      timestamp: game.timestamp,
+    });
+  } catch (err) {
+    console.error(err);
+    return handleResponse(res, 500, "Server error");
+  }
 };
-  
 
 export const setWinningNumberManually = async (req, res) => {
-    const { winningNumber } = req.body;
-   
+  const { winningNumber } = req.body;
 
-    if (typeof winningNumber !== 'number' || winningNumber < 0 || winningNumber > 9) {
-      return handleResponse(res, 400, "Winning number must be between 0 and 9.");
+  if (
+    typeof winningNumber !== "number" ||
+    winningNumber < 0 ||
+    winningNumber > 9
+  ) {
+    return handleResponse(res, 400, "Winning number must be between 0 and 9.");
+  }
+
+  try {
+    const activeGame = await Game.findOne({ gameStatus: "active" }).sort({
+      timestamp: -1,
+    });
+
+    if (!activeGame) {
+      return handleResponse(res, 404, "No active game found.");
     }
-  
-    try {
-      const activeGame = await Game.findOne({ gameStatus: 'active' }).sort({ timestamp: -1 });
-  
-      if (!activeGame) {
-        return handleResponse(res, 404, "No active game found.");
-      }
-  
-      const currentTime = Date.now();
-      const gameStartTime = new Date(activeGame.timestamp).getTime();
-      const gameAgeInSeconds = (currentTime - gameStartTime) / 1000;
-  
-     
-      if (gameAgeInSeconds < 50) {
-        return handleResponse(res, 403, `You can only set the winning number in the last 10 seconds of the game. Current game age: ${Math.floor(gameAgeInSeconds)}s`);
-      }
-  
-      activeGame.winningNumber = winningNumber;
-      activeGame.adminSet = true;
-      await activeGame.save();
-  
-      return handleResponse(res, 200, "Winning number set successfully by admin.", {
+
+    const currentTime = Date.now();
+    const gameStartTime = new Date(activeGame.timestamp).getTime();
+    const gameAgeInSeconds = (currentTime - gameStartTime) / 1000;
+
+    if (gameAgeInSeconds < 50) {
+      return handleResponse(
+        res,
+        403,
+        `You can only set the winning number in the last 10 seconds of the game. Current game age: ${Math.floor(
+          gameAgeInSeconds
+        )}s`
+      );
+    }
+
+    activeGame.winningNumber = winningNumber;
+    activeGame.adminSet = true;
+    await activeGame.save();
+
+    return handleResponse(
+      res,
+      200,
+      "Winning number set successfully by admin.",
+      {
         gameId: activeGame.gameId,
         winningNumber,
-        gameAgeInSeconds: Math.floor(gameAgeInSeconds)
-      });
-  
-    } catch (error) {
-      console.error("Error setting winning number:", error);
-      return handleResponse(res, 500, "Server error");
-    }
+        gameAgeInSeconds: Math.floor(gameAgeInSeconds),
+      }
+    );
+  } catch (error) {
+    console.error("Error setting winning number:", error);
+    return handleResponse(res, 500, "Server error");
+  }
 };
-  
+
+export const getLatestWinningNumbers = async (req, res) => {
+  try {
+    const latestGames = await Game.find({
+      gameStatus: "completed",
+      winningNumber: { $ne: null },
+    })
+      .sort({ timestamp: -1 })
+      .limit(10)
+      .select("gameId winningNumber timestamp");
+
+    return handleResponse(
+      res,
+      200,
+      "Latest winning numbers fetched successfully",
+      latestGames
+    );
+  } catch (error) {
+    console.error("Error fetching latest winning numbers:", error);
+    return handleResponse(res, 500, "Server error");
+  }
+};
+
+export const getAllGameStatsForAdmin = async (req, res) => {
+  try {
+    const completedGames = await Game.find({ gameStatus: "completed" }).sort({
+      timestamp: -1,
+    });
+
+    const gameStats = await Promise.all(
+      completedGames.map(async (game) => {
+        const uniqueUserObjectIds = [
+          ...new Set(game.users.map((user) => user.userId.toString())),
+        ];
+
+        // Fetch user details in batch
+        const usersData = await User.find({
+          _id: { $in: uniqueUserObjectIds },
+        }).select("name userId");
+
+        // Map _id to user details
+        const userIdToDetails = {};
+        usersData.forEach((u) => {
+          userIdToDetails[u._id.toString()] = {
+            name: u.name,
+            userId: u.userId, // here is the string ID like UID877956
+          };
+        });
+
+        let totalBidAmount = 0;
+        let totalPayout = 0;
+
+        const users = game.users.map((user) => {
+          totalBidAmount += user.bidAmount;
+          if (user.result === "win") {
+            totalPayout += user.selectedNumber * user.bidAmount;
+          }
+
+          const userDetails = userIdToDetails[user.userId.toString()] || {
+            name: "Unknown",
+            userId: "Unknown",
+          };
+
+          return {
+            userId: userDetails.userId, // this is UID877956 kind of string
+            userName: userDetails.name,
+            bidAmount: user.bidAmount,
+            selectedNumber: user.selectedNumber,
+            result: user.result,
+          };
+        });
+
+        return {
+          gameId: game.gameId,
+          timestamp: game.timestamp,
+          totalPlayers: uniqueUserObjectIds.length,
+          totalBidAmount,
+          totalPayout,
+          adminProfit: totalBidAmount - totalPayout,
+          users,
+        };
+      })
+    );
+
+    return handleResponse(
+      res,
+      200,
+      "Game stats fetched successfully",
+      gameStats
+    );
+  } catch (error) {
+    console.error("Error fetching admin game stats:", error);
+    return handleResponse(res, 500, "Server error");
+  }
+};
+
+export const getGameDetailsById = async (req, res) => {
+  const { gameId } = req.params;
+
+  try {
+    const game = await Game.findOne({ gameId });
+
+    if (!game) {
+      return handleResponse(res, 404, "Game not found with this ID");
+    }
+
+    let totalBidAmount = 0;
+    let totalPayout = 0;
+
+    const usersDetails = game.users.map((user) => {
+      totalBidAmount += user.bidAmount;
+
+      let payout = 0;
+      if (user.result === "win") {
+        payout = user.selectedNumber * user.bidAmount;
+        totalPayout += payout;
+      }
+
+      return {
+        userId: user.userId,
+        selectedNumber: user.selectedNumber,
+        bidAmount: user.bidAmount,
+        result: user.result,
+        payout,
+      };
+    });
+
+    return handleResponse(res, 200, "Game details fetched successfully", {
+      gameId: game.gameId,
+      timestamp: game.timestamp,
+      gameStatus: game.gameStatus,
+      winningNumber: game.winningNumber,
+      adminSet: game.adminSet,
+      totalPlayers: game.users.length,
+      totalBidAmount,
+      totalPayout,
+      adminProfit: totalBidAmount - totalPayout,
+      users: usersDetails,
+    });
+  } catch (err) {
+    console.error("Error fetching game details by ID:", err);
+    return handleResponse(res, 500, "Server error");
+  }
+};

@@ -4,6 +4,7 @@ import { sendEmail } from '../../utils/sendEmail.js';
 import { handleResponse } from '../../utils/helper.js';
 import Transaction from '../../models/transaction/transaction.js';
 
+import Game from '../../models/game/game.js';
 const generateUserId = () => {
     return "UID" + Math.floor(100000 + Math.random() * 900000);
 };
@@ -13,13 +14,17 @@ const generateUserId = () => {
 // };
 
 export const getAllPendingUsers = async (req, res) => {
-    try {
-        const users = await User.find({ isApproved: false });
-        handleResponse(res, 200, "Pending users fetched", users);
-    } catch (err) {
-        handleResponse(res, 500, "Server error");
-    }
+  try {
+    const users = await User.find({ isApproved: false })
+      .sort({ createdAt: -1 }); // ✅ Latest first
+
+    handleResponse(res, 200, "Pending users fetched", users);
+  } catch (err) {
+    console.error("Error fetching pending users:", err);
+    handleResponse(res, 500, "Server error");
+  }
 };
+
 
 
 export const approveUser = async (req, res) => {
@@ -110,11 +115,79 @@ export const getAllApprovedUsers = async (req, res) => {
     const users = await User.find({ 
       isApproved: true, 
       role: { $ne: 'admin' } 
-    }).select('-password -password_reset_jti');
+    })
+    .sort({ createdAt: -1 })  
+    .select('-password -password_reset_jti');
 
     handleResponse(res, 200, "Approved users fetched", users);
   } catch (err) {
     console.error(err);
     handleResponse(res, 500, "Server error");
+  }
+};
+
+
+
+export const getUserFullDetails = async (req, res) => {
+  
+  const { id: userId } = req.params;
+
+  try {
+    // 1. Find user
+    const user = await User.findById(userId).select('-password -password_reset_jti').lean();
+    if (!user) return handleResponse(res, 404, "User not found");
+
+    // 2. Get games user participated in
+    const games = await Game.find({ 'users.userId': userId, gameStatus: 'completed' })
+      .sort({ timestamp: -1 })
+      .lean();
+
+    let totalWon = 0;
+    let totalLost = 0;
+    const gameHistory = [];
+
+    for (const game of games) {
+      const player = game.users.find(u => u.userId.toString() === userId);
+      if (!player) continue;
+
+      const isWin = player.result === 'win';
+      const winAmount = isWin ? player.selectedNumber * player.bidAmount : 0;
+
+      if (isWin) totalWon += winAmount;
+      else totalLost += player.bidAmount;
+
+      gameHistory.push({
+        gameId: game.gameId,
+        selectedNumber: player.selectedNumber,
+        bidAmount: player.bidAmount,
+        winningNumber: game.winningNumber,
+        result: player.result,
+        winAmount,
+        totalParticipants: game.users.length,
+        timestamp: game.timestamp
+      });
+    }
+
+    // 3. Get all transactions
+    const transactions = await Transaction.find({ userId })
+      .sort({ timestamp: -1 })
+      .lean();
+
+    // 4. Send response
+    return handleResponse(res, 200, "User full details fetched successfully", {
+      user,
+      stats: {
+        totalGames: gameHistory.length,
+        totalWon,
+        totalLost,
+        net: totalWon - totalLost
+      },
+      gameHistory,
+      transactions
+    });
+
+  } catch (err) {
+    console.error("Error fetching user details:", err);
+    return handleResponse(res, 500, "Server error");
   }
 };
