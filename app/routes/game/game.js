@@ -1,17 +1,30 @@
-import express from 'express';
+import express from "express";
 import {
   playGame,
- getMyLastGameResult ,
- setWinningNumberManually
-} from '../../controllers/game.js';  
-import { verifyToken } from '../../middlewares/jwtAuth.js';
+  getMyLastGameResult,
+  setWinningNumberManually,
+  getLatestWinningNumbers,
+  getAllGameStatsForAdmin,
+  getGameDetailsById,
+} from "../../controllers/game.js";
+import { isAdmin, verifyToken } from "../../middlewares/jwtAuth.js";
 
 const router = express.Router();
 
-router.post('/play',verifyToken, playGame);
+// USER ROUTES
+router.post("/play", verifyToken, playGame);
+router.get("/my-last-result", verifyToken, getMyLastGameResult);
+router.get("/latest-winners", verifyToken, getLatestWinningNumbers);
 
-router.post('/admin/set-winning-number', verifyToken, setWinningNumberManually);
+// ADMIN ROUTES
+router.post(
+  "/admin/set-winning-number",
+  verifyToken,
+  isAdmin,
+  setWinningNumberManually
+);
+router.get("/admin/game-stats", verifyToken, isAdmin, getAllGameStatsForAdmin); 
 
-router.get('/my-last-result', verifyToken, getMyLastGameResult);
+router.get("/admin/:gameId", verifyToken, isAdmin, getGameDetailsById);
 
 export default router;
