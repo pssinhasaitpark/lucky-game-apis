@@ -6,69 +6,8 @@ import cron from "node-cron";
 import { handleResponse } from "../utils/helper.js";
 const betAmounts = [1, 5, 10, 20, 50, 100, 200, 500, 1000, 5000];
 
-// export const playGame = async (req, res) => {
-//     const { selectedNumber, bidAmount } = req.body;
-//     const userId = req.user.id;
 
-//     if (!betAmounts.includes(bidAmount)) {
-//       return handleResponse(res, 400, "Invalid bet amount");
-//     }
-
-//     if (selectedNumber < 0 || selectedNumber > 9) {
-//       return handleResponse(res, 400, "Selected number must be between 0 and 9");
-//     }
-
-//     try {
-//       const activeGame = await Game.findOne({ gameStatus: 'active' }).sort({ timestamp: -1 });
-
-//       if (!activeGame) {
-//         return handleResponse(res, 400, "No active game found");
-//       }
-
-//       const user = await User.findOne({ _id: userId });
-//       if (!user) return handleResponse(res, 404, "User not found");
-
-//       if (typeof user.wallet !== 'number') user.wallet = 0;
-
-//       if (user.wallet < bidAmount) {
-//         return handleResponse(res, 400, "Insufficient balance");
-//       }
-
-//       user.wallet -= bidAmount;
-
-//       await Transaction.create({
-//         userId: user._id,
-//         transactionType: 'deduction',
-//         amount: bidAmount,
-//         newBalance: user.wallet,
-//         description: `Bid placed on game ${activeGame.gameId}`
-//       });
-
-//       await user.save();
-
-//       activeGame.users.push({
-//         userId: user._id,
-//         selectedNumber,
-//         bidAmount,
-//         result: null,
-//       });
-
-//       await activeGame.save();
-
-//       return handleResponse(res, 200, "Bid placed successfully. Wait for game results.", {
-//         balance: user.wallet,
-//         selectedNumber,
-//         bidAmount,
-//         gameId: activeGame.gameId,
-//       });
-
-//     } catch (err) {
-//       console.error(err);
-//       return handleResponse(res, 500, "Server error");
-//     }
-// };
-
-export const playGame = async (req, res) => {
+/* export const playGame = async (req, res) => {
   const { selectedNumbers, bidAmount } = req.body;
   const userId = req.user.id;
 
@@ -146,6 +85,87 @@ export const playGame = async (req, res) => {
       selectedNumbers,
       bidAmount,
       totalBidAmount,
+    });
+  } catch (err) {
+    console.error(err);
+    return handleResponse(res, 500, "Server error");
+  }
+};
+ */
+
+export const playGame = async (req, res) => {
+  const { bids } = req.body; // New structure
+  const userId = req.user.id;
+
+  if (!Array.isArray(bids) || bids.length === 0) {
+    return handleResponse(res, 400, "'bids' must be a non-empty array.");
+  }
+
+  // Validate all bids
+  for (const bid of bids) {
+    if (
+      typeof bid.number !== "number" ||
+      bid.number < 0 ||
+      bid.number > 9 ||
+      typeof bid.amount !== "number" ||
+      !betAmounts.includes(bid.amount)
+    ) {
+      return handleResponse(
+        res,
+        400,
+        "Each bid must have a valid number (0–9) and amount from allowed betAmounts."
+      );
+    }
+  }
+
+  try {
+    const activeGame = await Game.findOne({ gameStatus: "active" }).sort({
+      timestamp: -1,
+    });
+    if (!activeGame) {
+      return handleResponse(res, 400, "No active game found");
+    }
+
+    const user = await User.findById(userId);
+    if (!user) return handleResponse(res, 404, "User not found");
+    if (typeof user.wallet !== "number") user.wallet = 0;
+
+    const totalBidAmount = bids.reduce((sum, bid) => sum + bid.amount, 0);
+
+    if (user.wallet < totalBidAmount) {
+      return handleResponse(res, 400, "Insufficient balance for total bid.");
+    }
+
+    // Deduct wallet
+    user.wallet -= totalBidAmount;
+
+    await Transaction.create({
+      userId: user._id,
+      transactionType: "deduction",
+      amount: totalBidAmount,
+      newBalance: user.wallet,
+      description: `Placed ${bids.length} bids in game ${activeGame.gameId}`,
+    });
+
+    await user.save();
+
+    // Save each bid in the game
+    for (const bid of bids) {
+      activeGame.users.push({
+        userId: user._id,
+        selectedNumber: bid.number,
+        bidAmount: bid.amount,
+        result: null,
+      });
+    }
+
+    await activeGame.save();
+
+    return handleResponse(res, 200, "Bids placed successfully", {
+      balance: user.wallet,
+      gameId: activeGame.gameId,
+      totalBidAmount,
+      bids,
     });
   } catch (err) {
     console.error(err);
@@ -439,7 +459,7 @@ export const getLatestWinningNumbers = async (req, res) => {
   }
 };
 
-export const getAllGameStatsForAdmin = async (req, res) => {
+/* export const getAllGameStatsForAdmin = async (req, res) => {
   try {
     const completedGames = await Game.find({ gameStatus: "completed" }).sort({
       timestamp: -1,
@@ -487,6 +507,238 @@ export const getAllGameStatsForAdmin = async (req, res) => {
             result: user.result,
           };
         });
+
+        return {
+          gameId: game.gameId,
+          timestamp: game.timestamp,
+          totalPlayers: uniqueUserObjectIds.length,
+          totalBidAmount,
+          totalPayout,
+          adminProfit: totalBidAmount - totalPayout,
+          users,
+        };
+      })
+    );
+
+    return handleResponse(
+      res,
+      200,
+      "Game stats fetched successfully",
+      gameStats
+    );
+  } catch (error) {
+    console.error("Error fetching admin game stats:", error);
+    return handleResponse(res, 500, "Server error");
+  }
+};
+ */
+
+/* export const getAllGameStatsForAdmin = async (req, res) => {
+  try {
+    const completedGames = await Game.find({ gameStatus: "completed" }).sort({
+      timestamp: -1,
+    });
+
+    const gameStats = await Promise.all(
+      completedGames.map(async (game) => {
+        const uniqueUserObjectIds = [
+          ...new Set(game.users.map((user) => user.userId.toString())),
+        ];
+
+        // Fetch user details in batch
+        const usersData = await User.find({
+          _id: { $in: uniqueUserObjectIds },
+        }).select("name userId");
+
+        // Map _id to user details
+        const userIdToDetails = {};
+        usersData.forEach((u) => {
+          userIdToDetails[u._id.toString()] = {
+            name: u.name,
+            userId: u.userId, // UID format
+          };
+        });
+
+        let totalBidAmount = 0;
+        let totalPayout = 0;
+
+        // Combine bids per user
+        const userMap = {};
+
+        game.users.forEach((entry) => {
+          const userIdStr = entry.userId.toString();
+          const userDetails = userIdToDetails[userIdStr] || {
+            name: "Unknown",
+            userId: "Unknown",
+          };
+
+          if (!userMap[userIdStr]) {
+            userMap[userIdStr] = {
+              userId: userDetails.userId,
+              userName: userDetails.name,
+              totalBidAmount: 0,
+              totalPayout: 0,
+              digitBids: Array(10).fill(0), // index 0 to 9
+            };
+          }
+
+          userMap[userIdStr].totalBidAmount += entry.bidAmount;
+
+          if (entry.result === "win") {
+            userMap[userIdStr].totalPayout +=
+              entry.selectedNumber * entry.bidAmount;
+          }
+
+          if (entry.selectedNumber >= 0 && entry.selectedNumber <= 9) {
+            userMap[userIdStr].digitBids[entry.selectedNumber] +=
+              entry.bidAmount;
+          }
+        });
+
+        // Create final user list
+        const users = Object.values(userMap).map((u) => {
+          const finalResult =
+            u.totalPayout === 0
+              ? "lose"
+              : u.totalPayout >= u.totalBidAmount
+              ? "win"
+              : "partial-win";
+
+          return {
+            userId: u.userId,
+            userName: u.userName,
+            totalBidAmount: u.totalBidAmount,
+            result: finalResult,
+            digitBids: Object.fromEntries(
+              u.digitBids.map((val, idx) => [idx, val])
+            ),
+          };
+        });
+
+        // Total bid and payout for this game
+        totalBidAmount = users.reduce(
+          (sum, user) => sum + user.totalBidAmount,
+          0
+        );
+        totalPayout = users.reduce((sum, user) => sum + user.totalPayout, 0);
+
+        return {
+          gameId: game.gameId,
+          timestamp: game.timestamp,
+          totalPlayers: uniqueUserObjectIds.length,
+          totalBidAmount,
+          totalPayout,
+          adminProfit: totalBidAmount - totalPayout,
+          users,
+        };
+      })
+    );
+
+    return handleResponse(
+      res,
+      200,
+      "Game stats fetched successfully",
+      gameStats
+    );
+  } catch (error) {
+    console.error("Error fetching admin game stats:", error);
+    return handleResponse(res, 500, "Server error");
+  }
+};
+ */
+
+export const getAllGameStatsForAdmin = async (req, res) => {
+  try {
+    const completedGames = await Game.find({ gameStatus: "completed" }).sort({
+      timestamp: -1,
+    });
+
+    const gameStats = await Promise.all(
+      completedGames.map(async (game) => {
+        const uniqueUserObjectIds = [
+          ...new Set(game.users.map((user) => user.userId.toString())),
+        ];
+
+        // Fetch user details in batch
+        const usersData = await User.find({
+          _id: { $in: uniqueUserObjectIds },
+        }).select("name userId");
+
+        // Map _id to user details
+        const userIdToDetails = {};
+        usersData.forEach((u) => {
+          userIdToDetails[u._id.toString()] = {
+            name: u.name,
+            userId: u.userId,
+          };
+        });
+
+        // Combine all bids per user
+        const userMap = {};
+
+        game.users.forEach((entry) => {
+          const userIdStr = entry.userId.toString();
+          const userDetails = userIdToDetails[userIdStr] || {
+            name: "Unknown",
+            userId: "Unknown",
+          };
+
+          if (!userMap[userIdStr]) {
+            userMap[userIdStr] = {
+              userId: userDetails.userId,
+              userName: userDetails.name,
+              totalBidAmount: 0,
+              totalPayout: 0,
+              digitBids: Array(10)
+                .fill(null)
+                .map(() => ({ amount: 0, count: 0 })),
+            };
+          }
+
+          userMap[userIdStr].totalBidAmount += entry.bidAmount;
+
+          if (entry.result === "win") {
+            userMap[userIdStr].totalPayout +=
+              entry.selectedNumber * entry.bidAmount;
+          }
+
+          const digit = entry.selectedNumber;
+          if (digit >= 0 && digit <= 9) {
+            userMap[userIdStr].digitBids[digit].amount += entry.bidAmount;
+            userMap[userIdStr].digitBids[digit].count += 1;
+          }
+        });
+
+        // Create final user list
+        const users = Object.values(userMap).map((u) => {
+          const finalResult =
+            u.totalPayout === 0
+              ? "lose"
+              : u.totalPayout >= u.totalBidAmount
+              ? "win"
+              : "partial-win";
+
+          return {
+            userId: u.userId,
+            userName: u.userName,
+            totalBidAmount: u.totalBidAmount,
+            totalPayout: u.totalPayout, // ✅ FIXED LINE
+            result: finalResult,
+            digitBids: Object.fromEntries(
+              u.digitBids.map((val, idx) => [idx, val])
+            ),
+          };
+        });
+
+        // ✅ Now this will work correctly
+        const totalBidAmount = users.reduce(
+          (sum, user) => sum + user.totalBidAmount,
+          0
+        );
+        const totalPayout = users.reduce(
+          (sum, user) => sum + user.totalPayout,
+          0
+        );
 
         return {
           gameId: game.gameId,
