@@ -1,9 +1,21 @@
-import express from 'express'
+import express from "express";
 const router = express.Router();
-import { loginUser, registerUser,registerAdmin } from "../../controllers/user/user.js"
+import {
+  loginUser,
+  registerUser,
+  registerAdmin,
+  changePassword,
+  transferWalletBalance,
+  getUserProfile,
+} from "../../controllers/user/user.js";
+import { verifyToken } from "../../middlewares/jwtAuth.js";
 
 router.post("/register", registerUser);
 router.post("/login", loginUser);
-router.post("/admin/register",registerAdmin)
+router.post("/admin/register", registerAdmin);
+router.post("/change-password", verifyToken, changePassword);
+router.post("/wallet/transfer", verifyToken, transferWalletBalance);
 
-export default router
+router.get("/profile", verifyToken, getUserProfile);
+
+export default router;

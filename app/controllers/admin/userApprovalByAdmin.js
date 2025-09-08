@@ -126,10 +126,30 @@ export const getAllApprovedUsers = async (req, res) => {
   }
 };
 
+export const deleteUser = async (req, res) => {
+  const { id: userId } = req.params;
 
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      return handleResponse(res, 404, "User not found");
+    }
+
+
+
+    await Transaction.deleteMany({ userId: user._id });
+
+  
+    await user.deleteOne();
+
+    return handleResponse(res, 200, "User deleted successfully");
+  } catch (err) {
+    console.error("Error deleting user:", err);
+    return handleResponse(res, 500, "Server error");
+  }
+};
 
 export const getUserFullDetails = async (req, res) => {
-  
   const { id: userId } = req.params;
 
   try {
@@ -137,7 +157,7 @@ export const getUserFullDetails = async (req, res) => {
     const user = await User.findById(userId).select('-password -password_reset_jti').lean();
     if (!user) return handleResponse(res, 404, "User not found");
 
-    // 2. Get games user participated in
+    // 2. Get completed games user participated in
     const games = await Game.find({ 'users.userId': userId, gameStatus: 'completed' })
       .sort({ timestamp: -1 })
       .lean();
@@ -147,25 +167,27 @@ export const getUserFullDetails = async (req, res) => {
     const gameHistory = [];
 
     for (const game of games) {
-      const player = game.users.find(u => u.userId.toString() === userId);
-      if (!player) continue;
+      // Get all bids by the user in this game
+      const userBids = game.users.filter(u => u.userId.toString() === userId);
 
-      const isWin = player.result === 'win';
-      const winAmount = isWin ? player.selectedNumber * player.bidAmount : 0;
+      for (const bid of userBids) {
+        const isWin = bid.result === 'win';
+        const winAmount = isWin ? bid.selectedNumber * bid.bidAmount : 0;
 
-      if (isWin) totalWon += winAmount;
-      else totalLost += player.bidAmount;
+        if (isWin) totalWon += winAmount;
+        else totalLost += bid.bidAmount;
 
-      gameHistory.push({
-        gameId: game.gameId,
-        selectedNumber: player.selectedNumber,
-        bidAmount: player.bidAmount,
-        winningNumber: game.winningNumber,
-        result: player.result,
-        winAmount,
-        totalParticipants: game.users.length,
-        timestamp: game.timestamp
-      });
+        gameHistory.push({
+          gameId: game.gameId,
+          selectedNumber: bid.selectedNumber,
+          bidAmount: bid.bidAmount,
+          winningNumber: game.winningNumber,
+          result: bid.result,
+          winAmount,
+          totalParticipants: game.users.length,
+          timestamp: game.timestamp
+        });
+      }
     }
 
     // 3. Get all transactions
