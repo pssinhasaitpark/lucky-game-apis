@@ -2,7 +2,10 @@ import User from "../../models/user/user.js";
 import bcrypt from "bcrypt";
 import { handleResponse } from "../../utils/helper.js";
 import { signAccessToken } from "../../middlewares/jwtAuth.js";
-import Transaction from "../../models/transaction/transaction.js";
+import Transaction from "../../models/transaction/transaction.js"; 
+
+
+
 export const registerUser = async (req, res) => {
   const { name, email, mobile } = req.body;
   try {
@@ -201,6 +204,28 @@ export const getUserProfile = async (req, res) => {
     return handleResponse(res, 200, "User profile fetched successfully", { user });
   } catch (error) {
     console.error("Get profile error:", error);
+    return handleResponse(res, 500, "Server error");
+  }
+};
+
+export const getUserWallet = async (req, res) => {
+  const userId = req.user.id; 
+
+  try {
+    const user = await User.findById(userId).select("wallet name email userId");
+
+    if (!user) {
+      return handleResponse(res, 404, "User not found");
+    }
+
+    return handleResponse(res, 200, "Wallet fetched successfully", {
+      wallet: user.wallet,
+      userId: user.userId,
+      name: user.name,
+      email: user.email,
+    });
+  } catch (error) {
+    console.error("Get wallet error:", error);
     return handleResponse(res, 500, "Server error");
   }
 };

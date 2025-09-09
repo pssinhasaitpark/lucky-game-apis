@@ -18,6 +18,8 @@ app.use(
       "http://localhost:5173",
       "http://192.168.0.136:5173",
       "http://192.168.0.239:8082",
+      "http://192.168.0.239:8081",
+      "http://localhost.:8081",
     ],
     methods: ["GET", "POST", "HEAD", "PUT", "PATCH", "DELETE"],
     optionsSuccessStatus: 200,
@@ -37,6 +39,10 @@ app.get("/", (req, res) => {
     error: false,
     message: "Lucky game project api's",
   });
+});
+
+app.get("/api/v1/time", (req, res) => {
+  res.json({ currentTime: new Date().toISOString() });
 });
 
 app.listen(port, host, () =>
