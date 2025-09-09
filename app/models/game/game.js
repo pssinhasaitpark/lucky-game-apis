@@ -10,6 +10,7 @@ const gameSchema = new mongoose.Schema({
         userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
         selectedNumber: { type: Number, required: true },
         bidAmount: { type: Number, required: true },
+        count: { type: Number, default: 1 }, 
         result: { type: String, enum: ['win', 'lose'] },
     }]
 });

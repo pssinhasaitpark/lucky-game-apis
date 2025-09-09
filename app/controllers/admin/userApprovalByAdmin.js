@@ -153,11 +153,11 @@ export const getUserFullDetails = async (req, res) => {
   const { id: userId } = req.params;
 
   try {
-    // 1. Find user
+
     const user = await User.findById(userId).select('-password -password_reset_jti').lean();
     if (!user) return handleResponse(res, 404, "User not found");
 
-    // 2. Get completed games user participated in
+
     const games = await Game.find({ 'users.userId': userId, gameStatus: 'completed' })
       .sort({ timestamp: -1 })
       .lean();
@@ -167,7 +167,7 @@ export const getUserFullDetails = async (req, res) => {
     const gameHistory = [];
 
     for (const game of games) {
-      // Get all bids by the user in this game
+
       const userBids = game.users.filter(u => u.userId.toString() === userId);
 
       for (const bid of userBids) {
@@ -190,12 +190,11 @@ export const getUserFullDetails = async (req, res) => {
       }
     }
 
-    // 3. Get all transactions
+
     const transactions = await Transaction.find({ userId })
       .sort({ timestamp: -1 })
       .lean();
 
-    // 4. Send response
     return handleResponse(res, 200, "User full details fetched successfully", {
       user,
       stats: {
