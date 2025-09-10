@@ -102,6 +102,10 @@ export const loginUser = async (req, res) => {
       return handleResponse(res, 401, "Not approved yet or invalid ID");
     }
 
+    if (user.isBlocked) {
+      return handleResponse(res, 403, "Your account is blocked. Please contact admin.");
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return handleResponse(res, 400, "Invalid password");
 
@@ -115,6 +119,7 @@ export const loginUser = async (req, res) => {
     handleResponse(res, 500, "Server error");
   }
 };
+
 
 
 export const transferWalletBalance = async (req, res) => {

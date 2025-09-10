@@ -14,12 +14,11 @@ const port = process.env.PORT || 5050;
 app.use(
   cors({
     origin: [
-      ,
       "http://localhost:5173",
       "http://192.168.0.136:5173",
       "http://192.168.0.239:8082",
       "http://192.168.0.239:8081",
-      "http://localhost.:8081",
+      "http://localhost:8081",
     ],
     methods: ["GET", "POST", "HEAD", "PUT", "PATCH", "DELETE"],
     optionsSuccessStatus: 200,

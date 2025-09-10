@@ -63,9 +63,6 @@ export const sendEmail = async (to, options) => {
                     <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; color: #333;">${options.password}</td>
                   </tr>
                 </table>
-                <p style="text-align: center; margin: 25px 0;">
-                  <a href="http://lucky-game.com/login" style="display: inline-block; padding: 12px 24px; background: #FF6B35; color: #ffffff; text-decoration: none; border-radius: 4px; font-weight: bold;">Login Now</a>
-                </p>
                 <p style="font-size: 16px; color: #333; line-height: 1.5;">
                   Enjoy the game and good luck!
                 </p>

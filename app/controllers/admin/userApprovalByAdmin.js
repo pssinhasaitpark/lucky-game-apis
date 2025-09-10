@@ -4,6 +4,8 @@ import { sendEmail } from '../../utils/sendEmail.js';
 import { handleResponse } from '../../utils/helper.js';
 import Transaction from '../../models/transaction/transaction.js';
 
+import mongoose from 'mongoose';
+
 import Game from '../../models/game/game.js';
 const generateUserId = () => {
     return "UID" + Math.floor(100000 + Math.random() * 900000);
@@ -26,6 +28,29 @@ export const getAllPendingUsers = async (req, res) => {
 };
 
 
+export const blockUser = async (req, res) => {
+  const userId = req.params.id;
+  const { block } = req.body;
+
+
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return handleResponse(res, 400, "Invalid user ID format");
+  }
+
+  try {
+    const user = await User.findById(userId);
+    if (!user) return handleResponse(res, 404, "User not found");
+
+    user.isBlocked = block;
+    await user.save();
+
+    const msg = block ? "User blocked successfully" : "User unblocked successfully";
+    return handleResponse(res, 200, msg, { userId: user.userId, isBlocked: user.isBlocked });
+  } catch (err) {
+    console.error("Block user error:", err);
+    return handleResponse(res, 500, "Server error");
+  }
+};
 
 export const approveUser = async (req, res) => {
   const userId = req.params.id;
