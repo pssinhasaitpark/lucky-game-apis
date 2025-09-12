@@ -18,7 +18,7 @@ const generateUserId = () => {
 export const getAllPendingUsers = async (req, res) => {
   try {
     const users = await User.find({ isApproved: false })
-      .sort({ createdAt: -1 }); // ✅ Latest first
+      .sort({ createdAt: -1 }); 
 
     handleResponse(res, 200, "Pending users fetched", users);
   } catch (err) {
