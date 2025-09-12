@@ -19,6 +19,8 @@ app.use(
       "http://192.168.0.239:8082",
       "http://192.168.0.239:8081",
       "http://localhost:8081",
+      "http://localhost:8082",
+      "https://lucky-game-admin.vercel.app",
     ],
     methods: ["GET", "POST", "HEAD", "PUT", "PATCH", "DELETE"],
     optionsSuccessStatus: 200,
