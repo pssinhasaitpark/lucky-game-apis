@@ -6,88 +6,9 @@ import cron from "node-cron";
 import { handleResponse } from "../utils/helper.js";
 const betAmounts = [1, 5, 10, 20, 50, 100, 200, 500, 1000, 5000];
 
+
+
 /* export const playGame = async (req, res) => {
-  const { bids } = req.body; // New structure
-  const userId = req.user.id;
-
-  if (!Array.isArray(bids) || bids.length === 0) {
-    return handleResponse(res, 400, "'bids' must be a non-empty array.");
-  }
-
-  // Validate all bids
-  for (const bid of bids) {
-    if (
-      typeof bid.number !== "number" ||
-      bid.number < 0 ||
-      bid.number > 9 ||
-      typeof bid.amount !== "number" ||
-      !betAmounts.includes(bid.amount)
-    ) {
-      return handleResponse(
-        res,
-        400,
-        "Each bid must have a valid number (0–9) and amount from allowed betAmounts."
-      );
-    }
-  }
-
-  try {
-    const activeGame = await Game.findOne({ gameStatus: "active" }).sort({
-      timestamp: -1,
-    });
-    if (!activeGame) {
-      return handleResponse(res, 400, "No active game found");
-    }
-
-    const user = await User.findById(userId);
-    if (!user) return handleResponse(res, 404, "User not found");
-    if (typeof user.wallet !== "number") user.wallet = 0;
-
-    const totalBidAmount = bids.reduce((sum, bid) => sum + bid.amount, 0);
-
-    if (user.wallet < totalBidAmount) {
-      return handleResponse(res, 400, "Insufficient balance for total bid.");
-    }
-
-    // Deduct wallet
-    user.wallet -= totalBidAmount;
-
-    await Transaction.create({
-      userId: user._id,
-      transactionType: "deduction",
-      amount: totalBidAmount,
-      newBalance: user.wallet,
-      description: `Placed ${bids.length} bids in game ${activeGame.gameId}`,
-    });
-
-    await user.save();
-
-    // Save each bid in the game
-    for (const bid of bids) {
-      activeGame.users.push({
-        userId: user._id,
-        selectedNumber: bid.number,
-        bidAmount: bid.amount,
-        result: null,
-      });
-    }
-
-    await activeGame.save();
-
-    return handleResponse(res, 200, "Bids placed successfully", {
-      balance: user.wallet,
-      gameId: activeGame.gameId,
-      totalBidAmount,
-      bids,
-    });
-  } catch (err) {
-    console.error(err);
-    return handleResponse(res, 500, "Server error");
-  }
-};
- */
-
-export const playGame = async (req, res) => {
   const { bids } = req.body; // New structure
   const userId = req.user.id;
 
@@ -183,6 +104,107 @@ export const playGame = async (req, res) => {
     return handleResponse(res, 500, "Server error");
   }
 };
+ */
+
+export const playGame = async (req, res) => {
+  const { bids } = req.body;
+  const userId = req.user.id;
+
+  if (!Array.isArray(bids) || bids.length === 0) {
+    return handleResponse(res, 400, "'bids' must be a non-empty array.");
+  }
+
+
+  for (const bid of bids) {
+    if (
+      typeof bid.number !== "number" ||
+      bid.number < 0 ||
+      bid.number > 9 ||
+      typeof bid.amount !== "number" ||
+      !betAmounts.includes(bid.amount)
+    ) {
+      return handleResponse(
+        res,
+        400,
+        "Each bid must have a valid number (0–9) and amount from allowed betAmounts."
+      );
+    }
+  }
+
+  try {
+    const activeGame = await Game.findOne({ gameStatus: "active" }).sort({
+      timestamp: -1,
+    });
+
+    if (!activeGame) {
+      return handleResponse(res, 400, "No active game found.");
+    }
+
+    const user = await User.findById(userId);
+    if (!user) return handleResponse(res, 404, "User not found.");
+
+    if (typeof user.wallet !== "number") user.wallet = 0;
+
+   
+    const aggregatedBids = bids.reduce((acc, bid) => {
+      const key = `${bid.number}-${bid.amount}`;
+      if (!acc[key]) {
+        acc[key] = { number: bid.number, amount: bid.amount, count: 1 };
+      } else {
+        acc[key].count += 1;
+      }
+      return acc;
+    }, {});
+
+ 
+    const totalBidAmount = Object.values(aggregatedBids).reduce(
+      (sum, bid) => sum + bid.amount * bid.count,
+      0
+    );
+
+    if (user.wallet < totalBidAmount) {
+      return handleResponse(res, 400, "Insufficient balance for total bid.");
+    }
+
+
+    user.wallet -= totalBidAmount;
+
+    await Transaction.create({
+      userId: user._id,
+      transactionType: "deduction",
+      amount: totalBidAmount,
+      newBalance: user.wallet,
+      description: `Placed ${bids.length} bids in game ${activeGame.gameId}`,
+    });
+
+    await user.save();
+
+  
+    for (const key in aggregatedBids) {
+      const bid = aggregatedBids[key];
+      activeGame.users.push({
+        userId: user._id,
+        selectedNumber: bid.number,
+        bidAmount: bid.amount,
+        count: bid.count,
+        result: null,
+      });
+    }
+
+    await activeGame.save();
+
+    return handleResponse(res, 200, "Bids placed successfully", {
+      balance: user.wallet,
+      gameId: activeGame.gameId,
+      totalBidAmount,
+      bids,
+    });
+  } catch (err) {
+    console.error(err);
+    return handleResponse(res, 500, "Server error");
+  }
+};
+
 
 /* export const finalizeGameResults = async (game) => {
   try {
@@ -206,8 +228,21 @@ export const playGame = async (req, res) => {
 
       if (player.selectedNumber === game.winningNumber) {
         result = "win";
+
+        // // Example: payout is bidAmount * 2
         // winAmount = player.bidAmount * 2;
-        winAmount = player.selectedNumber * player.bidAmount;
+
+        // // Agar aapko number ke hisaab se multiplier chahiye:
+        // winAmount = player.selectedNumber * player.bidAmount;
+
+
+        if (player.selectedNumber === 0 || player.selectedNumber === 1) { 
+          winAmount = player.bidAmount;
+        } else {
+          winAmount = player.selectedNumber * player.bidAmount;
+        }
+      
+
         user.wallet += winAmount;
 
         await Transaction.create({
@@ -236,10 +271,12 @@ export const playGame = async (req, res) => {
   }
 };
  */
+
 export const finalizeGameResults = async (game) => {
   try {
+   
     if (game.winningNumber === null || game.winningNumber === undefined) {
-      const randomWinningNumber = Math.floor(Math.random() * 10);
+      const randomWinningNumber = Math.floor(Math.random() * 10); // 0–9
       game.winningNumber = randomWinningNumber;
       game.adminSet = false;
       await game.save();
@@ -248,6 +285,7 @@ export const finalizeGameResults = async (game) => {
     for (let i = 0; i < game.users.length; i++) {
       const player = game.users[i];
       const user = await User.findById(player.userId);
+
       if (!user) {
         console.log(`User ${player.userId} not found`);
         continue;
@@ -259,11 +297,12 @@ export const finalizeGameResults = async (game) => {
       if (player.selectedNumber === game.winningNumber) {
         result = "win";
 
-        // // Example: payout is bidAmount * 2
-        // winAmount = player.bidAmount * 2;
-
-        // Agar aapko number ke hisaab se multiplier chahiye:
-        winAmount = player.selectedNumber * player.bidAmount;
+ 
+        if (player.selectedNumber === 0 || player.selectedNumber === 1) {
+          winAmount = player.bidAmount; 
+        } else {
+          winAmount = player.selectedNumber * player.bidAmount;
+        }
 
         user.wallet += winAmount;
 
@@ -284,7 +323,6 @@ export const finalizeGameResults = async (game) => {
     }
 
     game.gameStatus = "completed";
-
     await game.save();
 
     console.log(`Game ${game.gameId} results finalized.`);
@@ -292,6 +330,8 @@ export const finalizeGameResults = async (game) => {
     console.error("Error finalizing game results:", error);
   }
 };
+
+
 
 const generateGameId = async () => {
   const dateStr = new Date().toISOString().split("T")[0];

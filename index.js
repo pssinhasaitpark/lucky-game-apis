@@ -22,7 +22,7 @@ app.use(
       "http://localhost:8082",
       "https://lucky-game-admin.vercel.app",
     ],
-    methods: ["GET", "POST", "HEAD", "PUT", "PATCH", "DELETE"],
+    methods: ["GET", "POST", "HEAD", "PUT", "PATCH", "DELETE"],                                                                                         
     optionsSuccessStatus: 200,
     credentials: true,
   })
